@@ -25,8 +25,70 @@ const (
 var (
 	columnStyle  = lipgloss.NewStyle().Padding(1, 2)
 	focusedStyle = lipgloss.NewStyle().Padding(1, 2).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("62"))
-	helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("41"))
+	// helpStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("41"))
 )
+
+/* FORM MODEL */
+
+type Form struct {
+	title   textinput.Model
+	desc    textarea.Model
+	focused status
+}
+
+func NewForm(focused status) *Form {
+	form := &Form{focused: focused}
+	form.title = textinput.New()
+	form.title.Focus()
+	form.desc = textarea.New()
+
+	return form
+
+}
+
+func (m Form) Init() tea.Cmd {
+	return nil
+}
+
+func (m Form) CreateTask() tea.Msg {
+	task := NewTask(m.focused, m.title.Value(), m.desc.Value())
+	return TaskCreatedMsg{Task: task}
+}
+
+type TaskCreatedMsg struct {
+	Task Task
+}
+
+func (m Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		case "enter":
+			if m.title.Focused() {
+				m.title.Blur()
+				m.desc.Focus()
+				return m, textarea.Blink
+			} else {
+				return m, m.CreateTask
+			}
+		}
+	}
+
+	if m.title.Focused() {
+		m.title, cmd = m.title.Update(msg)
+		return m, cmd
+	} else {
+		m.desc, cmd = m.desc.Update(msg)
+		return m, cmd
+	}
+}
+
+func (m Form) View() string {
+	return lipgloss.JoinVertical(lipgloss.Left, m.title.View(), m.desc.View())
+}
 
 /* CUSTOM ITEM */
 
@@ -37,6 +99,10 @@ type Task struct {
 }
 
 // implement the list.item interface
+
+func NewTask(status status, title string, description string) Task {
+	return Task{status: status, title: title, description: description}
+}
 
 func (t Task) FilterValue() string {
 	return t.title
@@ -68,12 +134,12 @@ type Model struct {
 }
 
 /* MODEL MANAGEMENT */
-var models []tea.Model
+// var models []tea.Model
 
-const (
-	model status = iota
-	form
-)
+// const (
+// 	model status = iota
+// 	form
+// )
 
 func New() *Model {
 	return &Model{}
@@ -106,61 +172,6 @@ func (m *Model) Prev() {
 	} else {
 		m.focused--
 	}
-}
-
-/* FORM MODEL */
-
-type Form struct {
-	title textinput.Model
-	desc  textarea.Model
-}
-
-func NewForm() *Form {
-	form := &Form{}
-	form.title = textinput.New()
-	form.title.Focus()
-	form.desc = textarea.New()
-
-	return form
-
-}
-
-func (m Form) Init() tea.Cmd {
-	return nil
-}
-
-// func
-
-func (m Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "enter":
-			if m.title.Focused() {
-				m.title.Blur()
-				m.desc.Focus()
-				return m, textarea.Blink
-			} else {
-				models[form] = m
-				return models[model], m.NewTask
-			}
-		}
-	}
-
-	if m.title.Focused(){
-		m.title, cmd = m.title.Update(msg)
-		return m, cmd
-	} else {
-		m.desc, cmd = m.desc.Update(msg)
-		return m.desc, cmd 
-	}
-	return m, nil
-}
-
-func (m Form) View() string {
-	return "form view"
 }
 
 func (m *Model) initLists(width int, height int) {
@@ -218,7 +229,7 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		if !m.loaded {
@@ -241,10 +252,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m, m.MoveToNext
 		case "n":
-			models[model] = m
-			return models[form].Update(nil)
+			form := NewForm(m.focused)
+			return form.Update(nil)
 		}
-
+	case TaskCreatedMsg:
+		task := msg.Task
+		m.lists[task.status].InsertItem(len(m.lists[task.status].Items()), task)
+		return m, nil
 	}
 	var cmd tea.Cmd
 	m.lists[m.focused], cmd = m.lists[m.focused].Update(msg)
@@ -288,8 +302,8 @@ func (m Model) View() string {
 }
 
 func main() {
-	models := []tea.Model{New(), NewForm()}
-	m := models[model]
+	// models := []tea.Model{New(), NewForm(todo)}
+	m := New()
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)
