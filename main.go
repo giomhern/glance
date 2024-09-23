@@ -21,6 +21,13 @@ const (
 	done
 )
 
+var models []tea.Model
+
+const (
+	board status = iota
+	form
+)
+
 /* STYLING */
 var (
 	columnStyle  = lipgloss.NewStyle().Padding(1, 2)
@@ -52,6 +59,7 @@ func (m Form) Init() tea.Cmd {
 
 func (m Form) CreateTask() tea.Msg {
 	task := NewTask(m.focused, m.title.Value(), m.desc.Value())
+	fmt.Println(task)
 	return TaskCreatedMsg{Task: task}
 }
 
@@ -72,18 +80,17 @@ func (m Form) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.desc.Focus()
 				return m, textarea.Blink
 			} else {
-				return m, m.CreateTask
+				return models[board], m.CreateTask
 			}
 		}
 	}
 
 	if m.title.Focused() {
 		m.title, cmd = m.title.Update(msg)
-		return m, cmd
 	} else {
 		m.desc, cmd = m.desc.Update(msg)
-		return m, cmd
 	}
+	return m, cmd
 }
 
 func (m Form) View() string {
@@ -253,12 +260,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.MoveToNext
 		case "n":
 			form := NewForm(m.focused)
-			return form.Update(nil)
+			return form, nil // Switch to form model
 		}
 	case TaskCreatedMsg:
 		task := msg.Task
 		m.lists[task.status].InsertItem(len(m.lists[task.status].Items()), task)
-		return m, nil
+		return m, nil // Switch back to main model
 	}
 	var cmd tea.Cmd
 	m.lists[m.focused], cmd = m.lists[m.focused].Update(msg)
@@ -302,8 +309,8 @@ func (m Model) View() string {
 }
 
 func main() {
-	// models := []tea.Model{New(), NewForm(todo)}
-	m := New()
+	models = []tea.Model{New(), NewForm(todo)}
+	m := models[board]
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Println(err)
